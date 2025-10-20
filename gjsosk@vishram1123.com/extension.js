@@ -22,6 +22,43 @@ if (major < 49) {
 }
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
+// Courtesy of https://stackoverflow.com/a/20745721
+function timer(callback, delay) {
+    var id, started, remaining = delay, running
+
+    this.start = function () {
+        running = true
+        started = new Date()
+        id = setTimeout(callback, remaining)
+    }
+
+    this.pause = function () {
+        running = false
+        clearTimeout(id)
+        remaining -= new Date() - started
+    }
+
+    this.clear = function () {
+        running = false
+        clearTimeout(id)
+    }
+
+    this.getTimeLeft = function () {
+        if (running) {
+            this.pause()
+            this.start()
+        }
+
+        return remaining
+    }
+
+    this.getStateRunning = function () {
+        return running
+    }
+
+    this.start()
+}
+
 const State = {
     OPENED: 0,
     CLOSED: 1,
@@ -1134,12 +1171,37 @@ class Keyboard extends Dialog {
             })
             settingsBtn.add_style_class_name("settings_btn")
             settingsBtn.add_style_class_name("key")
+
+            let longPressTimeout;
+            let openSettings = this.settingsOpenFunction;
             settingsBtn.connect("button-press-event", () => {
-                this.settingsOpenFunction();
+                longPressTimeout = new timer(function () {
+                    openSettings();
+                    longPressTimeout.clear();
+                }, 500);
             })
             settingsBtn.connect("touch-event", () => {
-                if (Clutter.get_current_event().type() == Clutter.EventType.TOUCH_BEGIN)
-                    this.settingsOpenFunction();
+                let touchEvent = Clutter.get_current_event().type()
+                if (touchEvent == Clutter.EventType.TOUCH_BEGIN) {
+                    longPressTimeout = new timer(function () {
+                        openSettings();
+                        longPressTimeout.clear();
+                    }, 500);
+                }
+                if (touchEvent == Clutter.EventType.TOUCH_END) {
+                    if (longPressTimeout.getStateRunning()) {
+                        let layout = this.settings.get_int("layout-landscape");
+                        this.settings.set_int("layout-landscape", (layout == 5) ? 8 : 5)
+                        longPressTimeout.clear();
+                    }
+                }
+            })
+            settingsBtn.connect("button-release-event", () => {
+                if (longPressTimeout.getStateRunning()) {
+                    let layout = this.settings.get_int("layout-landscape");
+                    this.settings.set_int("layout-landscape", (layout == 5) ? 8 : 5)
+                    longPressTimeout.clear();
+                }
             })
             gridLeft.attach(settingsBtn, 0, 0, 2 * topBtnWidth, 3)
             this.keys.push(settingsBtn)
@@ -1227,12 +1289,52 @@ class Keyboard extends Dialog {
             })
             settingsBtn.add_style_class_name("settings_btn")
             settingsBtn.add_style_class_name("key")
+            let longPressTimeout;
+            let openSettings = this.settingsOpenFunction;
             settingsBtn.connect("button-press-event", () => {
-                this.settingsOpenFunction();
+                console.log("Pressed");
+                longPressTimeout = new timer(function () {
+                    console.log("Long pressed");
+                    openSettings();
+                    longPressTimeout.clear();
+                    console.log("Long press, timeout cleared");
+                }, 500);
             })
             settingsBtn.connect("touch-event", () => {
-                if (Clutter.get_current_event().type() == Clutter.EventType.TOUCH_BEGIN)
-                    this.settingsOpenFunction();
+                let touchEvent = Clutter.get_current_event().type()
+                console.log(touchEvent)
+                if (touchEvent == Clutter.EventType.TOUCH_BEGIN) {
+                    console.log("Pressed");
+                    longPressTimeout = new timer(function () {
+                        console.log("Long pressed");
+                        openSettings();
+                        longPressTimeout.clear();
+                        console.log("Long press, timeout cleared");
+                    }, 500);
+                }
+                if (touchEvent == Clutter.EventType.TOUCH_END) {
+                    console.log(this.settings.get_int("landscape-width-percent"))
+                    console.log(this.settings.get_int("landscape-height-percent"))
+                    if (longPressTimeout.getStateRunning()) {
+                        let layout = this.settings.get_int("layout-landscape");
+                        console.log("Layout", layout)
+                        this.settings.set_int("layout-landscape", (layout == 5) ? 8 : 5)
+                        this.settings.set_int("landscape-width-percent", (layout == 5) ? 40 : 100)
+                        this.settings.set_int("landscape-height-percent", (layout == 5) ? 35 : 45)
+                        this.settings.set_boolean("enable-drag", (layout == 5))
+                        longPressTimeout.clear();
+                        console.log("Released, timeout cleared");
+                    }
+                }
+            })
+            settingsBtn.connect("button-release-event", () => {
+                if (longPressTimeout.getStateRunning()) {
+                    let layout = this.settings.get_int("layout-landscape");
+                    console.log("Layout", layout)
+                    this.settings.set_int("layout-landscape", (layout == 5) ? 8 : 5)
+                    longPressTimeout.clear();
+                    console.log("Released, timeout cleared");
+                }
             })
             grid.attach(settingsBtn, 0, 0, 2 * topBtnWidth, 3)
             this.keys.push(settingsBtn)
